@@ -66,7 +66,9 @@ class ThreeApp {
     color: 0x3399ff, // マテリアルの基本色
   };
   static MESH_PARAM = {
-    MESH_NUM: 100,
+    BOX_MESH_NUM: 100,
+    OTHER_MESH_NUM: 10,
+    TOTAL_MESH_NUM: 110,
     POS_RANGE: 10,
     MAX_SCALE: 1.5,
     TARGET_MESH_NUM: 10
@@ -130,20 +132,26 @@ class ThreeApp {
 
     // たくさんのメッシュを様々なジオメトリで作成する
     this.meshes = [];
-    for (let i = 0; i < ThreeApp.MESH_PARAM.MESH_NUM; i++) {
+    for (let i = 0; i < ThreeApp.MESH_PARAM.BOX_MESH_NUM; i++) {
+      const mesh = this.#randomMesh(true);
+      this.meshes.push(mesh);
+    }
+    for (let i = 0; i < ThreeApp.MESH_PARAM.OTHER_MESH_NUM; i++) {
       const mesh = this.#randomMesh();
       this.meshes.push(mesh);
     }
 
     this.scene.add(...this.meshes);
 
+    // メッシュを動かす関数を設定する
     this.meshes.forEach(mesh => mesh._function = null);
-    for(let i = 0; i < ThreeApp.MESH_PARAM.MESH_NUM; i++) {
+    for(let i = 0; i < ThreeApp.MESH_PARAM.TOTAL_MESH_NUM; i++) {
       const mesh = this.meshes[i];
       mesh._function = this.#meshMove(mesh.position);
     }
+    // 2sごとに動きを変更する
     setInterval(() => {
-      for(let i = 0; i < ThreeApp.MESH_PARAM.MESH_NUM; i++) {
+      for(let i = 0; i < ThreeApp.MESH_PARAM.TOTAL_MESH_NUM; i++) {
         const mesh = this.meshes[i];
         mesh._function = this.#meshMove(mesh.position);
       }
@@ -206,6 +214,7 @@ class ThreeApp {
 
   /**
    * 乱数生成関数
+   * @param isInt trueにすると整数値でランダム値を返す
    */
   #mapRand(min, max, isInt = false) {
     let rand = Math.random() * (max - min) + min;
@@ -215,8 +224,9 @@ class ThreeApp {
 
   /**
    * メッシュ生成
+   * @param isBoxOnly BoxGeometryのみ生成
    */
-  #randomMesh() {
+  #randomMesh(isBoxOnly = false) {
     const geometries = [
       new THREE.BoxGeometry(1.0, 1.0, 1.0),
       new THREE.ConeGeometry(0.5, 1.0, 16),
@@ -234,7 +244,7 @@ class ThreeApp {
     };
     const material = new THREE.MeshLambertMaterial({ color });
     const gIndex = this.#mapRand(0, geometries.length - 1, true);
-    const mesh = new THREE.Mesh(geometries[gIndex], material);
+    const mesh = isBoxOnly ? new THREE.Mesh(geometries[0], material) : new THREE.Mesh(geometries[gIndex], material);
     mesh.position.set(pos.x, pos.y, pos.z);
     const scale = this.#mapRand(1, ThreeApp.MESH_PARAM.MAX_SCALE)
     mesh.geometry.scale(scale, scale, scale);
