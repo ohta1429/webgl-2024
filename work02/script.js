@@ -65,7 +65,7 @@ class ThreeApp {
     swingDirection: 1,
     swingMaxRight: Math.PI / 3,
     swingMaxLeft: -Math.PI / 3,
-    swingSpeed: 0.03,
+    swingSpeed: 0.01,
     innerRadius: 0.3,
     outerRadius: 2.0,
     thetaSegments: 30,
@@ -89,7 +89,7 @@ class ThreeApp {
 
   fanGroup;
   bodyGroup;
-
+  isStop;
 
   /**
    * コンストラクタ
@@ -149,12 +149,28 @@ class ThreeApp {
     // グループ
     this.bodyGroup = new THREE.Group();
     this.fanGroup = new THREE.Group();
+    this.switchGroup = new THREE.Group();
 
     // 本体
-    const bodyGeometry = new THREE.CylinderGeometry( 0.3, 0.3, 1.5, 64); 
+    const bodyGeometry = new THREE.CylinderGeometry( 0.4, 0.4, 1.5, 64); 
     const body =  new THREE.Mesh(bodyGeometry, this.material);
     body.rotation.x = Math.PI / 2;
     body.position.z = 0.5;
+
+    // スイッチ
+    const switchBody1 = new THREE.CylinderGeometry( 0.1, 0.1, 0.7, 64);
+    const switc1 =  new THREE.Mesh(switchBody1, this.material);
+    switc1.position.y = 0.5;
+
+    const switchBody2 = new THREE.CylinderGeometry( 0.2, 0.2, 0.1, 64);
+    const switc2 =  new THREE.Mesh(switchBody2, this.material);
+    switc2.position.y = 0.9;
+
+    this.switchGroup.add(switc1);
+    this.switchGroup.add(switc2);
+
+    this.switchGroup.position.x = -0.15;
+
     
     // 脚
     const legGeometry = new THREE.CylinderGeometry( 0.2, 0.2, 3, 64);
@@ -176,20 +192,22 @@ class ThreeApp {
                                             );
 
     for (let i = 0; i < ThreeApp.FAN_PRAM.num; i++) {
-      const fan = new THREE.Mesh(this.fanGeometry, this.material);
       const group = new THREE.Group();
+      for( let j = 0; j < 50; j++ ) {
+        const fan = new THREE.Mesh(this.fanGeometry, this.material);
+        fan.position.z = -0.005 * j;
+        group.add(fan);
+      }
       group.rotation.z = (Math.PI / 1.5) * i;
-      group.add(fan);
       this.fanGroup.add(group);
     }
     this.fanGroup.position.z = 1;
 
     this.bodyGroup.add(this.fanGroup);
     this.bodyGroup.add(body);
+    this.bodyGroup.add(this.switchGroup);
     this.bodyGroup.position.y = 3.0;
-    // this.bodyGroup.position.z = 1.0;
 
-    // this.scene.add(body);
     this.scene.add(this.bodyGroup);
     this.scene.add(leg);
     this.scene.add(base);
@@ -197,7 +215,7 @@ class ThreeApp {
     // 軸ヘルパー
     const axesBarLength = 5.0;
     this.axesHelper = new THREE.AxesHelper(axesBarLength);
-    this.scene.add(this.axesHelper);
+    // this.scene.add(this.axesHelper);
 
     // コントロール
     this.controls = new OrbitControls(this.camera, this.renderer.domElement);
@@ -207,23 +225,19 @@ class ThreeApp {
 
     // キーの押下状態を保持するフラグ
     this.isDown = false;
-
     this.isStop = false;
 
     // キーの押下や離す操作を検出できるようにする
     window.addEventListener('keydown', (keyEvent) => {
       switch (keyEvent.key) {
         case ' ':
-          this.isDown = true;
+          this.isDown = !this.isDown;
           break;
-        case 'q':
-          this.isStop = true;
+        case 's':
+          this.isStop = !this.isStop;
           break;
         default:
       }
-    }, false);
-    window.addEventListener('keyup', (keyEvent) => {
-      this.isDown = false;
     }, false);
 
     // ウィンドウのリサイズを検出できるようにする
@@ -232,6 +246,10 @@ class ThreeApp {
       this.camera.aspect = window.innerWidth / window.innerHeight;
       this.camera.updateProjectionMatrix();
     }, false);
+  }
+
+  lerp( a,b,t ) {
+    return a + (b - a) * t;
   }
 
   /**
@@ -245,16 +263,16 @@ class ThreeApp {
     this.controls.update();
     
     // フラグに応じてオブジェクトの状態を変化させる
-    if (this.isDown === true) {
-      // 個々のトーラスではなくグループを回転させると…… @@@
-      // this.group.rotation.y += 0.05;
-      
+    if( this.isDown ) {
       const rY = this.bodyGroup.rotation.y;
       if( rY < ThreeApp.FAN_PRAM.swingMaxLeft || rY > ThreeApp.FAN_PRAM.swingMaxRight ) {
         ThreeApp.FAN_PRAM.swingDirection *= -1;
       }
-
+  
       this.bodyGroup.rotation.y += ThreeApp.FAN_PRAM.swingSpeed * ThreeApp.FAN_PRAM.swingDirection;
+      this.switchGroup.position.y = -0.3;
+    } else {
+      this.switchGroup.position.y = 0;
     }
 
     this.fanGroup.rotation.z += 0.07;
