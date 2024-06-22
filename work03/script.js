@@ -31,13 +31,25 @@ class ThreeApp {
   static MOON_SCALE = 0.1;
   static EARTH_SCALE = 3.0;
   /**
-   * 月と地球の間の距離
-   */
+ * 月と地球の間の距離
+ */
   static MOON_DISTANCE = 3.0;
-    /**
+  /**
+   * 地球の間の距離
+   */
+  static DISTANCE = 3.3;
+  /**
    * 移動速度
    */
-    static MOVEMENT_SPEED = 0.05;
+    static ORBIT_SPEED = 0.5;
+  /**
+   * 曲がる力
+   */
+  static TURN_SCALE = 1.0;
+  /**
+   * オフセット
+   */
+  static ANGLE_OFFSET = Math.PI / 4;
   /**
    * カメラ定義のための定数
    */
@@ -53,7 +65,7 @@ class ThreeApp {
    * レンダラー定義のための定数
    */
   static RENDERER_PARAM = {
-    clearColor: 0xffffff,
+    clearColor: 0x001e43,
     width: window.innerWidth,
     height: window.innerHeight,
   };
@@ -99,8 +111,9 @@ class ThreeApp {
   controls;         // オービットコントロール
   axesHelper;       // 軸ヘルパー
   isDown;           // キーの押下状態用フラグ
-  clock;            // 時間管理用 @@@
+  clock;            // 時間管理用
   sphereGeometry;   // ジオメトリ
+  coneGeometry;     // コーンジオメトリ
   earth;            // 地球
   earthMaterial;    // 地球用マテリアル
   earthTexture;     // 地球用テクスチャ
@@ -111,11 +124,9 @@ class ThreeApp {
   orbit;
   orbitMaterial;
   orbitDirection;
-
-  position1;
-  position1Material;
+  orbit2;
+  orbitDirection2;
   
-
   /**
    * コンストラクタ
    * @constructor
@@ -222,44 +233,21 @@ class ThreeApp {
     this.earth = new THREE.Mesh(this.sphereGeometry, this.earthMaterial);
     this.scene.add(this.earth);
 
-    // 月のマテリアルとメッシュ
-    this.moonMaterial = new THREE.MeshPhongMaterial(ThreeApp.MATERIAL_PARAM);
-    this.moonMaterial.map = this.moonTexture;
-    this.moon = new THREE.Mesh(this.sphereGeometry, this.moonMaterial);
-    // this.scene.add(this.moon);
-    // 月はやや小さくして、さらに位置も動かす
-    this.moon.scale.setScalar(ThreeApp.MOON_SCALE);
-    this.moon.position.set(ThreeApp.MOON_DISTANCE, 0.0, 0.0);
-
-
-    // 目的地オブジェクト
-    this.position1Material = new THREE.MeshPhongMaterial(ThreeApp.POSITION_MATERIAL_PARAM);
-    this.position1 = new THREE.Mesh(this.sphereGeometry, this.position1Material);
-    this.scene.add(this.position1);
-    this.position1.scale.setScalar(ThreeApp.MOON_SCALE * 0.5);
-    const rad = Math.PI * 0.25;
-    const phi = Math.PI * 0.3;
-    this.position1.position.set(
-      Math.sin(rad) * Math.cos(phi) * ThreeApp.EARTH_SCALE,
-      Math.sin(rad) * Math.sin(phi) * ThreeApp.EARTH_SCALE,
-      Math.cos(rad) * ThreeApp.EARTH_SCALE,
-    );
-
-    const temp = this.position1.position.clone();
-    temp.normalize();
-    const xVector = new THREE.Vector3(1.0 , 0.0, 0.0);
-    const cos = temp.dot(xVector);
-    console.log((180 / Math.PI) * Math.acos(cos));
-
-
-    // 地球の周りをぐるぐる回るオブジェクト
-    this.orbitMaterial = new THREE.MeshPhongMaterial(ThreeApp.MATERIAL_PARAM);
-    this.orbit = new THREE.Mesh(this.sphereGeometry, this.orbitMaterial);
-    this.scene.add(this.orbit);
+    // 地球の周りをぐるぐる回るオブジェクトを作成
+    this.coneGeometry = new THREE.ConeGeometry(2.0, 4.0, 32);
+    this.orbitMaterial = new THREE.MeshPhongMaterial(ThreeApp.POSITION_MATERIAL_PARAM);
+    this.orbit = new THREE.Mesh(this.coneGeometry, this.orbitMaterial);
+    this.orbit2 = new THREE.Mesh(this.coneGeometry, this.orbitMaterial);
     this.orbit.scale.setScalar(ThreeApp.MOON_SCALE);
-    this.orbit.position.set(ThreeApp.MOON_DISTANCE, 0.0, 0.0);
-    this.orbitDirection = new THREE.Vector3(0.0, 0.0, 1.0).normalize();
+    this.orbit2.scale.setScalar(ThreeApp.MOON_SCALE);
+    this.orbit.position.set(0.0,ThreeApp.DISTANCE,0.0);
+    this.orbit2.position.set(0.0,ThreeApp.DISTANCE,0.0);
+    // 進行方向の初期化
+    this.orbitDirection = new THREE.Vector3(0.0, 1.0, 0.0).normalize();
+    this.orbitDirection2 = new THREE.Vector3(0.0, 1.0, 0.0).normalize();
 
+    this.scene.add(this.orbit);
+    this.scene.add(this.orbit2);
 
     // コントロール
     this.controls = new OrbitControls(this.camera, this.renderer.domElement);
@@ -267,7 +255,7 @@ class ThreeApp {
     // ヘルパー
     const axesBarLength = 5.0;
     this.axesHelper = new THREE.AxesHelper(axesBarLength);
-    this.scene.add(this.axesHelper);
+    // this.scene.add(this.axesHelper);
 
     // キーの押下状態を保持するフラグ
     this.isDown = false;
@@ -297,64 +285,63 @@ class ThreeApp {
 
     // フラグに応じてオブジェクトの状態を変化させる
     if (this.isDown === true) {
-      // this.earth.rotation.y += 0.05;
       // this.moon.rotation.y += 0.05;
-      // this.orbit.rotation.y += 0.05;
-
-      /* キーをお知らた赤い球体に地表を舐めるに近づけたい
-
-      const time = this.clock.getElapsedTime();
-
-      const subVector = new THREE.Vector3().subVectors(this.position1.position, this.orbit.position);
-      subVector.normalize();
-      this.orbitDirection.add(subVector.multiplyScalar(ThreeApp.MOVEMENT_SPEED));
-      this.orbitDirection.normalize();
-      const direction = this.orbitDirection.clone();
-
-      const direction1 = this.position1.position.clone();
-      direction1.normalize();
-      const phiCos = direction1.dot(new THREE.Vector3(1.0 , 0.0, 0.0));
-      const phi = Math.acos(phiCos);
-
-      const sin = Math.sin(time);
-      const cos = Math.cos(time);
-      const cosP = Math.cos(phi);
-      const sinP = Math.sin(phi);
-
-      const tempV = new THREE.Vector3(
-      sin * cosP * ThreeApp.MOON_DISTANCE,
-      sin * sinP * ThreeApp.MOON_DISTANCE,
-      cos * ThreeApp.MOON_DISTANCE,
-      );
-
-       this.orbit.position.add(tempV);
-       */
-       
     }
-      
-      // 前回のフレームからの経過時間の取得 @@@
-      const time = this.clock.getElapsedTime();
-      // 経過時間をそのままラジアンとしてサインとコサインを求める
-      const phi = Math.PI * 0.25;
-      const sin = Math.sin(time);
-      const cos = Math.cos(time);
+    this.earth.rotation.y += 0.005;
+    this.earth.rotation.z += 0.005;
 
-      const cosP = Math.cos(phi);
-      const sinP = Math.sin(phi);
+    // 前フレームの位置
+    const prevPosition = this.orbit.position.clone();
+    const prevPosition2 = this.orbit2.position.clone();
+    // 前フレームの進行方向ベクトル
+    const previousDirection = this.orbitDirection.clone();
+    const previousDirection2 = this.orbitDirection2.clone();
 
-      // 月の座標を（XZ 平面に水平に）動かす
-      // this.moon.position.set(
-      //   cos * ThreeApp.MOON_DISTANCE,
-      //   0.0,
-      //   sin * ThreeApp.MOON_DISTANCE,
-      // );
+    // 球体の周りを回る動きを計算
+    const radius = ThreeApp.DISTANCE;  // 球体の半径 + コーンの半径の合計
+    const time = this.clock.getElapsedTime();
+    const orbitAngle = time * ThreeApp.ORBIT_SPEED;
+    
+    // コーンの位置を時間経過から計算
+    this.orbit.position.set(
+      radius * Math.cos(orbitAngle + ThreeApp.ANGLE_OFFSET) * -1,
+      radius * Math.sin(orbitAngle + ThreeApp.ANGLE_OFFSET),
+      radius * Math.cos(orbitAngle + ThreeApp.ANGLE_OFFSET),
+    );
+    this.orbit2.position.set(
+      radius * Math.cos(orbitAngle + ThreeApp.ANGLE_OFFSET),
+      0.0,
+      radius * Math.sin(orbitAngle + ThreeApp.ANGLE_OFFSET),
+    );
+    
+    // 前の位置と現在の位置から、２点間を結ぶベクトルを定義 => 向きを計算
+    const subVector = new THREE.Vector3().subVectors(this.orbit.position, prevPosition);
+    subVector.normalize();
+    const subVector2 = new THREE.Vector3().subVectors(this.orbit2.position, prevPosition2);
+    subVector2.normalize();
+    // 進行方向ベクトルに向きベクトルをスケールして加算    
+    this.orbitDirection.add(subVector.multiplyScalar(ThreeApp.TURN_SCALE));
+    this.orbitDirection.normalize();
+    this.orbitDirection2.add(subVector2.multiplyScalar(ThreeApp.TURN_SCALE));
+    this.orbitDirection2.normalize();
 
-      this.orbit.position.set(
-        sin * cosP * ThreeApp.MOON_DISTANCE,
-        sin * sinP * ThreeApp.MOON_DISTANCE,
-        cos * ThreeApp.MOON_DISTANCE,
-      );
-
+    // 前フレームの進行方向と現在の進行方向の2つのベクトルから法線ベクトルを求める
+    const normalAxis = new THREE.Vector3().crossVectors(previousDirection, this.orbitDirection);
+    normalAxis.normalize();
+    const normalAxis2 = new THREE.Vector3().crossVectors(previousDirection2, this.orbitDirection2);
+    normalAxis2.normalize();
+    // 前フレームの進行方向と現在の進行方向の2つのベクトルから内積でコサインを取り出す
+    const cos = previousDirection.dot(this.orbitDirection);
+    const cos2 = previousDirection2.dot(this.orbitDirection2);
+    // コサインをラジアンへ変換
+    const radians = Math.acos(cos);
+    const radians2 = Math.acos(cos2);
+    // 求めた法線ベクトルとラジアンからクォータニオンを定義
+    const qtn = new THREE.Quaternion().setFromAxisAngle(normalAxis, radians);
+    const qtn2 = new THREE.Quaternion().setFromAxisAngle(normalAxis2, radians2);
+    // コーンメッシュのクォータニオンに乗算
+    this.orbit.quaternion.premultiply(qtn);
+    this.orbit2.quaternion.premultiply(qtn2);
 
     // レンダラーで描画
     this.renderer.render(this.scene, this.camera);
